@@ -1,0 +1,75 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "t2dsim-ai"
+dynamic = ["version"]
+description = ''
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+keywords = []
+authors = [
+  { name = "Valentina Roquemen-Echeverri", email = "valentina.roquemen@udea.edu.co" },
+  { name = "Clara Mosquera-Lopez", email = "cmarcela.ml@gmail.com" },
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3.8",
+  "Programming Language :: Python :: 3.9",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: Implementation :: CPython",
+  "Programming Language :: Python :: Implementation :: PyPy",
+]
+dependencies = [
+  "numpy==1.23.*",
+  "torch==1.13.0",
+  "matplotlib",
+  "scikit-learn==1.2.2",
+  "pandas==2.2.2"]
+
+[project.optional-dependencies]
+dev = [
+  "pytest",
+  "mypy",
+  "pre-commit",
+  "ruff",
+]
+
+[project.urls]
+Documentation = "https://github.com/vlt-ro/t2dsim-ai#readme"
+Issues = "https://github.com/vlt-ro/t2dsim-ai/issues"
+Source = "https://github.com/vlt-ro/t2dsim-ai"
+
+[tool.hatch.version]
+path = "src/t2dsim_ai/__about__.py"
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/t2dsim_ai tests}"
+
+[tool.coverage.run]
+source_pkgs = ["t2dsim_ai", "tests"]
+branch = true
+parallel = true
+omit = [
+  "src/t2dsim_ai/__about__.py",
+]
+
+[tool.coverage.paths]
+t2dsim_ai = ["src/t2dsim_ai", "*/t2dsim-ai/src/t2dsim_ai"]
+tests = ["tests", "*/t2dsim-ai/tests"]
+
+[tool.coverage.report]
+exclude_lines = [
+  "no cov",
+  "if __name__ == .__main__.:",
+  "if TYPE_CHECKING:",
+]
