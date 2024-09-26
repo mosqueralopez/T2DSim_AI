@@ -1,0 +1,44 @@
+,0
+demog_DMGroup,Type 2 Diabetes in 1 OAD
+demog_ageBaseline,43.0
+demog_sex,Female
+demog_race,White
+demog_diagnosisYear,2020.0
+demog_heightBaseline,150.2
+demog_weightBaseline,108.1
+demog_heartRateBaseline,60.0
+demog_BMIBaseline,47.92
+med_sulfonylurea,False
+med_sglt2,False
+med_glp1,False
+med_biguanide,True
+med_insulin,False
+subjectID,021-037
+best_epoch,19
+best_valLoss,22.110342025756836
+RMSE_NeuralOGTT_validation,80.25714111328125
+RMSE_DigitalTwin_validation,22.571815490722656
+n_seqs_validation,82
+Glucose Variability_true_validation,11.485271453857422
+Glucose Variability_pred_validation,8.093591690063477
+TITR_true_validation,37.30880529144274
+TITR_pred_validation,21.434477056634975
+TIR_true_validation,87.10210830921868
+TIR_pred_validation,86.56469615543612
+TAR_true_validation,12.897891690781316
+TAR_pred_validation,13.43530384456387
+TBR_true_validation,0.0
+TBR_pred_validation,0.0
+RMSE_NeuralOGTT_test,79.490234375
+RMSE_DigitalTwin_test,24.735218048095703
+n_seqs_test,81
+Glucose Variability_true_test,12.57246208190918
+Glucose Variability_pred_test,8.416559219360352
+TITR_true_test,35.94894329357606
+TITR_pred_test,24.670433145009415
+TIR_true_test,82.25570202971332
+TIR_pred_test,83.8878426449048
+TAR_true_test,17.74429797028667
+TAR_pred_test,16.112157355095206
+TBR_true_test,0.0
+TBR_pred_test,0.0

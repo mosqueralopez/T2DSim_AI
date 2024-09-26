@@ -1,0 +1,44 @@
+,0
+demog_DMGroup,"Type 2 Diabetes in MDI, CSII or Basal insulin plus GLP-1 and with/out OAD"
+demog_ageBaseline,31.0
+demog_sex,Male
+demog_race,White
+demog_diagnosisYear,2010.0
+demog_heightBaseline,179.6
+demog_weightBaseline,69.2
+demog_heartRateBaseline,56.0
+demog_BMIBaseline,21.45
+med_sulfonylurea,False
+med_sglt2,False
+med_glp1,True
+med_biguanide,False
+med_insulin,True
+subjectID,021-012
+best_epoch,19
+best_valLoss,39.81275177001953
+RMSE_NeuralOGTT_validation,73.6570816040039
+RMSE_DigitalTwin_validation,38.640342712402344
+n_seqs_validation,80
+Glucose Variability_true_validation,16.35055923461914
+Glucose Variability_pred_validation,11.60909652709961
+TITR_true_validation,45.52966101694915
+TITR_pred_validation,23.47457627118644
+TIR_true_validation,75.5084745762712
+TIR_pred_validation,56.58898305084746
+TAR_true_validation,24.406779661016948
+TAR_pred_validation,42.733050847457626
+TBR_true_validation,0.0847457627118644
+TBR_pred_validation,0.6779661016949152
+RMSE_NeuralOGTT_test,74.3102035522461
+RMSE_DigitalTwin_test,38.834259033203125
+n_seqs_test,79
+Glucose Variability_true_test,18.28911590576172
+Glucose Variability_pred_test,11.64358139038086
+TITR_true_test,47.02853464921691
+TITR_pred_test,27.268826432096116
+TIR_true_test,73.76099549452906
+TIR_pred_test,57.283844668526065
+TAR_true_test,25.40227419008796
+TAR_pred_test,41.79360652220553
+TBR_true_test,0.8367303153829649
+TBR_pred_test,0.9225488092683973

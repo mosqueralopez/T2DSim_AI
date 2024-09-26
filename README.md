@@ -31,13 +31,27 @@ python example/runOGTT.py
 ```
 
 After running the example, the simulation will appear as follows for `initCGM = 100 mg/dL`:
+
 ![OGTTExample](example/example_neuralOGTT_fastingGlucose_100.png)
 
 ### DT-NeuralOGTT
 
-WIP
+Digital twins are constructed by combining the NeuralOGTT with individual-level subnetworks to improve simulation accuracy though integration of additional glucose management and contextual data (e.g., heart rate, sleep data, and time-related features) to model inter- and intra-individual variability in glucose dynamics not modeled by NeuralOGTT.
+
+Run the following command to simulate one day of the digital twin #0.
+
+```bash
+python example/runDTNeuralOGTT.py
+```
+
+After running the example, the simulation will look as follows:
+
+![OGTTExample](example/example_DTneuralOGTT_digitaltwin0.png)
+
 
 ## Creation of a Digital Twin
+
+WIP
 
 ## Citation
 

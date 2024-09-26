@@ -1,0 +1,44 @@
+,0
+demog_DMGroup,Prediabetes (both IGT and IFG)
+demog_ageBaseline,50.0
+demog_sex,Female
+demog_race,White
+demog_diagnosisYear,2020.0
+demog_heightBaseline,165.1
+demog_weightBaseline,98.1
+demog_heartRateBaseline,81.0
+demog_BMIBaseline,35.99
+med_sulfonylurea,False
+med_sglt2,False
+med_glp1,False
+med_biguanide,True
+med_insulin,False
+subjectID,021-039
+best_epoch,19
+best_valLoss,20.72621726989746
+RMSE_NeuralOGTT_validation,70.98396301269531
+RMSE_DigitalTwin_validation,21.03675651550293
+n_seqs_validation,85
+Glucose Variability_true_validation,12.216314315795898
+Glucose Variability_pred_validation,7.201018810272217
+TITR_true_validation,69.93020937188435
+TITR_pred_validation,92.26321036889331
+TIR_true_validation,97.10867397806581
+TIR_pred_validation,99.82053838484546
+TAR_true_validation,2.7318045862412754
+TAR_pred_validation,0.13958125623130607
+TBR_true_validation,0.15952143569292124
+TBR_pred_validation,0.03988035892323031
+RMSE_NeuralOGTT_test,70.12090301513672
+RMSE_DigitalTwin_test,25.6676025390625
+n_seqs_test,84
+Glucose Variability_true_test,11.766182899475098
+Glucose Variability_pred_test,7.919407367706299
+TITR_true_test,55.185633575464095
+TITR_pred_test,93.96690879741726
+TIR_true_test,96.32768361581921
+TIR_pred_test,99.83857949959645
+TAR_true_test,3.652138821630347
+TAR_pred_test,0.16142050040355124
+TBR_true_test,0.020177562550443905
+TBR_pred_test,0.0
