@@ -1,7 +1,6 @@
 # T2DSim AI
 
 <img alt="Supported Python versions" src="https://img.shields.io/badge/Supported_Python_Versions-3.9-blue">
-<img alt="GitHub License" src="https://img.shields.io/badge/license-MIT-green">
 
 -----
 
