@@ -10,7 +10,7 @@
 - [Simulation: NeuralOGTT and DT-NeuralOGTT](#simulation-neuralogtt-and-dt-neuralogtt)
 - [Creation of a Digital Twin](#creation-of-a-digital-twin)
 - [Citation](#citation)
-- [License](#license)
+
 
 ## Installation
 
@@ -66,7 +66,3 @@ If you used this package in your research, please cite it:
 ```
 
 TODO: Add final work
-
-## License
-
-`t2dsim-ai` is distributed under the terms of the [MIT](https://spdx.org/licenses/MIT.html) license.
