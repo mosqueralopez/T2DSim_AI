@@ -8,7 +8,7 @@ from t2dsim_ai.options import (
     n_neuron_ind,
 )
 from t2dsim_ai.ss_simulator import ForwardEulerSimulator
-from t2dsim_ai.model_NeuralOGTT import CGMOHSUSimStateSpaceModel_T2DOGTT, WeightClipper
+from t2dsim_ai.model_neuralOGTT import CGMOHSUSimStateSpaceModel_T2DOGTT, WeightClipper
 from t2dsim_ai.preprocess import scaler_inverse, scaler_Pop
 import torch
 from pathlib import Path
@@ -128,7 +128,20 @@ class CGMOHSUSimStateSpaceModel_T2D(nn.Module):
             in_x[..., [5]],
         )
 
-        hr, sleep, sulfo, sglt2, glp1, biguanide, is_weekend, hour_cos, hour_sin = (
+        (
+            hr,
+            hr_min,
+            hr_max,
+            hr_std,
+            sleep,
+            sulfo,
+            sglt2,
+            glp1,
+            biguanide,
+            is_weekend,
+            hour_cos,
+            hour_sin,
+        ) = (
             u_pop[..., [0]],
             u_pop[..., [1]],
             u_pop[..., [2]],
@@ -138,20 +151,34 @@ class CGMOHSUSimStateSpaceModel_T2D(nn.Module):
             u_pop[..., [6]],
             u_pop[..., [7]],
             u_pop[..., [8]],
+            u_pop[..., [9]],
+            u_pop[..., [10]],
+            u_pop[..., [11]],
         )
         u_I, u_carbs = u_ogtt[..., [0]], u_ogtt[..., [1]]
 
-        # C1'(C1, u_carbs, u_glp1)
         inp = torch.cat((C1, u_carbs, glp1), -1)
         dC1_pop = self.C1_pop(inp)
 
-        # C2'(C1,C2)
         inp = torch.cat((C1, C2), -1)
         dC2_pop = self.C2_pop(inp)
 
-        # Gc'(Gc,C2,Ie,HR, sleep, is_weekend, hour_cos, hour_sin, biguanide, sglt2)
         inp = torch.cat(
-            (Gc, C2, Ie, hr, sleep, is_weekend, hour_cos, hour_sin, biguanide, sglt2),
+            (
+                Gc,
+                C2,
+                Ie,
+                hr,
+                hr_min,
+                hr_max,
+                hr_std,
+                sleep,
+                is_weekend,
+                hour_cos,
+                hour_sin,
+                biguanide,
+                sglt2,
+            ),
             -1,
         )
         dGc_pop = self.Gc_pop(inp)

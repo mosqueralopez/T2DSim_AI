@@ -14,31 +14,19 @@ med_glp1,False
 med_biguanide,True
 med_insulin,False
 subjectID,021-029
-best_epoch,20
-best_valLoss,32.01420593261719
-RMSE_NeuralOGTT_validation,75.42633056640625
-RMSE_DigitalTwin_validation,32.072269439697266
-n_seqs_validation,77
-Glucose Variability_true_validation,16.225229263305664
-Glucose Variability_pred_validation,13.76623821258545
-TITR_true_validation,74.40017609509134
-TITR_pred_validation,91.08518600044025
-TIR_true_validation,93.17631521021352
-TIR_pred_validation,97.31454985692274
-TAR_true_validation,6.713625357693155
-TAR_pred_validation,0.3962139555359894
-TBR_true_validation,0.11005943209333038
-TBR_pred_validation,2.2892361875412726
-RMSE_NeuralOGTT_test,82.39785766601562
-RMSE_DigitalTwin_test,28.338912963867188
-n_seqs_test,76
-Glucose Variability_true_test,18.698266983032227
-Glucose Variability_pred_test,12.905144691467285
-TITR_true_test,78.76895628902764
-TITR_pred_test,88.96074933095451
-TIR_true_test,93.7778768956289
-TIR_pred_test,96.56556645851919
-TAR_true_test,4.527207850133808
-TAR_pred_test,0.26761819803746656
-TBR_true_test,1.6949152542372878
-TBR_pred_test,3.166815343443354
+best_epoch,24
+best_valLoss,28.26128578186035
+NeuralOGTT_path,/home/roquemen/JDRFProject_DiabetesAISimulator/T2D-simulator/src/OGTT/models/6compartments/ProductionModel/NeuralOGTT.pt
+RMSE_NeuralOGTT_validation,159.0220947265625
+RMSE_DigitalTwin_validation,28.26128578186035
+n_seqs_validation,24
+Glucose Variability_true_validation,19.658517837524414
+Glucose Variability_pred_validation,16.841917037963867
+TITR_true_validation,75.46620046620048
+TITR_pred_validation,79.8951048951049
+TIR_true_validation,94.14335664335664
+TIR_pred_validation,97.0862470862471
+TAR_true_validation,5.710955710955711
+TAR_pred_validation,2.8554778554778557
+TBR_true_validation,0.1456876456876457
+TBR_pred_validation,0.05827505827505827

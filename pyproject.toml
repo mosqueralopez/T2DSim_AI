@@ -5,11 +5,11 @@ build-backend = "hatchling.build"
 [project]
 name = "t2dsim-ai"
 dynamic = ["version"]
-description = ''
+description = "Hybrid neural digital-twin framework for simulating glucose dynamics in type 2 diabetes"
 readme = "README.md"
-requires-python = ">=3.8"
-license = "MIT"
-keywords = []
+requires-python = ">=3.9"
+license = { file = "LICENSE" }
+keywords = ["diabetes", "digital-twin", "glucose", "OGTT", "simulation"]
 authors = [
   { name = "Valentina Roquemen-Echeverri", email = "valentina.roquemen@udea.edu.co" },
   { name = "Clara Mosquera-Lopez", email = "cmarcela.ml@gmail.com" },
@@ -17,20 +17,20 @@ authors = [
 classifiers = [
   "Development Status :: 4 - Beta",
   "Programming Language :: Python",
-  "Programming Language :: Python :: 3.8",
   "Programming Language :: Python :: 3.9",
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: Implementation :: CPython",
-  "Programming Language :: Python :: Implementation :: PyPy",
 ]
 dependencies = [
   "numpy==1.23.*",
   "torch==1.13.0",
   "matplotlib",
   "scikit-learn==1.2.2",
-  "pandas==2.2.2"]
+  "pandas==2.2.2",
+  "scipy",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -38,22 +38,36 @@ dev = [
   "mypy",
   "pre-commit",
   "ruff",
+  "coverage",
 ]
 
 [project.urls]
-Documentation = "https://github.com/vlt-ro/t2dsim-ai#readme"
-Issues = "https://github.com/vlt-ro/t2dsim-ai/issues"
-Source = "https://github.com/vlt-ro/t2dsim-ai"
+Documentation = "https://github.com/mosqueralopez/T2DSim_AI#readme"
+Issues = "https://github.com/mosqueralopez/T2DSim_AI/issues"
+Source = "https://github.com/mosqueralopez/T2DSim_AI"
 
 [tool.hatch.version]
 path = "src/t2dsim_ai/__about__.py"
 
-[tool.hatch.envs.types]
-extra-dependencies = [
-  "mypy>=1.0.0",
+[tool.hatch.build.targets.wheel]
+force-include = { "src/t2dsim_ai/models" = "t2dsim_ai/models" }
+
+[tool.hatch.build.targets.sdist]
+include = [
+  "/src/t2dsim_ai",
+  "/LICENSE",
+  "/README.md",
 ]
-[tool.hatch.envs.types.scripts]
-check = "mypy --install-types --non-interactive {args:src/t2dsim_ai tests}"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = [
+  "slow: marks tests as slow (training smoke tests)",
+]
+
+[tool.ruff]
+line-length = 88
+target-version = "py39"
 
 [tool.coverage.run]
 source_pkgs = ["t2dsim_ai", "tests"]
@@ -73,3 +87,10 @@ exclude_lines = [
   "if __name__ == .__main__.:",
   "if TYPE_CHECKING:",
 ]
+
+[tool.hatch.envs.types]
+extra-dependencies = [
+  "mypy>=1.0.0",
+]
+[tool.hatch.envs.types.scripts]
+check = "mypy --install-types --non-interactive {args:src/t2dsim_ai tests}"

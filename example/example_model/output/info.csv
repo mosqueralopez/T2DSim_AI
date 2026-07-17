@@ -1,0 +1,5 @@
+metric,value
+best_val_rmse_scaled,0.3601559102535248
+n_epochs,2
+n_iter,168
+subjectID,data_example

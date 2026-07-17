@@ -1,56 +1,106 @@
 # T2DSim AI
 
-<img alt="Supported Python versions" src="https://img.shields.io/badge/Supported_Python_Versions-3.9-blue">
+<img alt="Supported Python versions" src="https://img.shields.io/badge/Supported_Python_Versions-3.9+-blue">
 
 -----
+
+## Hybrid Neural Digital-Twin Framework for Type 2 Diabetes
+
+Valentina Roquemen-Echeverri and Clara Mosquera-Lopez
+
+This repository provides tools to simulate glucose-insulin dynamics in type 2 diabetes using:
+
+- **NeuralOGTT**: population OGTT model from fasting glucose
+- **DT-NeuralOGTT**: personalized digital twins integrating heart rate, sleep, medications, and temporal features
 
 ## Table of Contents
 
 - [Installation](#installation)
-- [Simulation: NeuralOGTT and DT-NeuralOGTT](#simulation-neuralogtt-and-dt-neuralogtt)
+- [Simulation](#simulation)
 - [Creation of a Digital Twin](#creation-of-a-digital-twin)
 - [Citation](#citation)
-
+- [License](#license)
 
 ## Installation
 
 ```console
 pip install t2dsim-ai
 ```
-## Simulation: NeuralOGTT and DT-NeuralOGTT
+
+For development:
+
+```console
+pip install -e ".[dev]"
+```
+
+## Simulation
 
 ### NeuralOGTT
 
-NeuralOGTT is a novel hybrid approach to modeling glucose-insulin dynamics during the oral glucose tolerance test (OGTT).
-
-Run the following command to simulate an OGTT, with the initial fasting glucose as the only input. To modify the input, change the variable `initCGM`.
+Simulate a standard 75 g OGTT from fasting glucose only:
 
 ```bash
 python example/runOGTT.py
 ```
 
-After running the example, the simulation will appear as follows for `initCGM = 100 mg/dL`:
-
-![OGTTExample](example/example_neuralOGTT_fastingGlucose_100.png)
+![OGTT example](example/img/example_neuralOGTT_fastingGlucose_100.png)
 
 ### DT-NeuralOGTT
 
-Digital twins are constructed by combining the NeuralOGTT with individual-level subnetworks to improve simulation accuracy though integration of additional glucose management and contextual data (e.g., heart rate, sleep data, and time-related features) to model inter- and intra-individual variability in glucose dynamics not modeled by NeuralOGTT.
+Simulate one day for bundled digital twin `#0` using a scenario generated from the twin's `info.csv`:
 
-Run the following command to simulate one day of the digital twin #0.
+```python
+from t2dsim_ai import DigitalTwin, scenario_from_twin_info
+
+twin = DigitalTwin(0)
+df = scenario_from_twin_info(twin.digital_twin_Info)
+result = twin.simulate(df)
+```
+
+Or run the example script:
 
 ```bash
 python example/runDTNeuralOGTT.py
 ```
 
-After running the example, the simulation will look as follows:
+![Digital twin example](example/img/example_DTneuralOGTT_digitaltwin0.png)
 
-![OGTTExample](example/example_DTneuralOGTT_digitaltwin0.png)
-
+`scenario_from_twin_info()` builds heart-rate variability, medication traces, meals, sleep, and time features from each twin's metadata.
 
 ## Creation of a Digital Twin
 
-WIP
+Train a digital twin from a subject CSV with CGM, heart rate, meals, medications, and sleep.
+
+Example dataset: [`example/example_model/data_example.csv`](example/example_model/data_example.csv)
+
+Required columns:
+
+- `timestamp`
+- `cgm_value`
+- `heartRate_mean`, `heartRate_min`, `heartRate_max`, `heartRate_std`
+- `meals_mealSize`
+- `meds_medicationDose$rapid_acting_insulin`
+- `grouped_meds_medicationGroup$sulfonylurea`
+- `grouped_meds_medicationGroup$sglt2`
+- `grouped_meds_medicationGroup$glp1`
+- `grouped_meds_medicationGroup$biguanide`
+- `sleep_efficiency` (optional)
+
+Run training:
+
+```bash
+python example/trainDigitalTwin.py
+```
+
+This writes `model.pt`, `scaler_inputsPop.pkl`, and `info.csv` to `example/example_model/output/`.
+
+Processing utilities (HR imputation, insulin on board, oral medication kernels) live in `t2dsim_ai.data_processing`.
+
+Maintainers can refresh bundled twins from the research codebase with:
+
+```bash
+python scripts/sync_digital_twins.py
+```
 
 ## Citation
 
@@ -65,4 +115,8 @@ If you used this package in your research, please cite it:
 }
 ```
 
-TODO: Add final work
+## License
+
+This project is distributed under the OHSU research license in [`LICENSE`](LICENSE).
+
+Use is permitted for non-profit research institutions, hospitals, and academic universities. Redistribution, sublicensing, and commercial use require written permission from the copyright holder.
