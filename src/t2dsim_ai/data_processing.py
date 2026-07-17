@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 
 from t2dsim_ai.medications import MEDICATION_SAMPLING_DT_MIN, discrete_oral_med_kernel
-from t2dsim_ai.options import inputs, inputs_OGTT, inputs_Pop, rename_cols_dict, states, ts
+from t2dsim_ai.options import inputs, inputs_OGTT, inputs_Pop, rename_cols_dict, states
 
 REQUIRED_COLUMNS = [
     "timestamp",

@@ -89,7 +89,7 @@ class CGMOHSUSimStateSpaceModel_T2DOGTT(nn.Module):
 
     def forward(self, in_x, in_u):
 
-        C1, C2, Gc, Ge, Ie, I = (
+        C1, C2, Gc, Ge, Ie, I_state = (
             in_x[..., [0]],
             in_x[..., [1]],
             in_x[..., [2]],
@@ -116,11 +116,11 @@ class CGMOHSUSimStateSpaceModel_T2DOGTT(nn.Module):
         dGe = self.net_dGe(in_4)
 
         # NN5(Ie,I)
-        in_5 = torch.cat((Ie, I), -1)
+        in_5 = torch.cat((Ie, I_state), -1)
         dIe = self.net_dIe(in_5)
 
         # NN6(I,Ge,C2,uI)
-        in_6 = torch.cat((I, Ge, C2, u_I), -1)
+        in_6 = torch.cat((I_state, Ge, C2, u_I), -1)
         dI = self.net_dI(in_6)
 
         return {"C1": dC1, "C2": dC2, "Gc": dGc, "Ge": dGe, "Ie": dIe, "I": dI}
@@ -154,7 +154,7 @@ class NeuralOGTT:
 
         u_ogtt = u_ogtt.reshape(-1, u_ogtt.shape[0], u_ogtt.shape[1])
 
-        batch_start = np.array([0], dtype=np.int)
+        batch_start = np.array([0], dtype=int)
         batch_idx = batch_start[:, np.newaxis] + np.arange(len(df_scenario))
 
         x0_est = torch.tensor(

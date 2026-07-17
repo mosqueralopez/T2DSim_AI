@@ -35,7 +35,6 @@ def scaler_Pop(
     pop_input_names=None,
     scale_input_names=None,
 ):
-    path_ogtt_scaler = str(_SCALER_DIR)
     path_scaler = str(path_scaler)
 
     if u_pop is None:

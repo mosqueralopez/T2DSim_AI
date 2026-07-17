@@ -119,7 +119,7 @@ class CGMOHSUSimStateSpaceModel_T2D(nn.Module):
                 net.apply(clipper)
 
     def forward(self, in_x, u_ogtt, u_pop):
-        C1, C2, Gc, Ge, Ie, I = (
+        C1, C2, Gc, Ge, Ie, I_state = (
             in_x[..., [0]],
             in_x[..., [1]],
             in_x[..., [2]],
@@ -188,11 +188,11 @@ class CGMOHSUSimStateSpaceModel_T2D(nn.Module):
         dGe_pop = self.Ge_pop(inp)
 
         # Ie'(Ie,I)
-        inp = torch.cat((Ie, I), -1)
+        inp = torch.cat((Ie, I_state), -1)
         dIe_pop = self.Ie_pop(inp)
 
         # I'(I,Ge,C2,uI)
-        inp = torch.cat((I, Ge, C2, u_I, glp1, sulfo), -1)
+        inp = torch.cat((I_state, Ge, C2, u_I, glp1, sulfo), -1)
         dI_pop = self.I_pop(inp)
 
         return {
@@ -260,7 +260,7 @@ class DigitalTwin:
         u_pop = u_pop.reshape(-1, u_pop.shape[0], u_pop.shape[1])
 
         sim_time_test = len(df_scenario)
-        batch_start = np.array([0], dtype=np.int)
+        batch_start = np.array([0], dtype=int)
         batch_idx = batch_start[:, np.newaxis] + np.arange(sim_time_test)
 
         x0_est = torch.tensor(
