@@ -20,4 +20,4 @@ def test_get_tir_respects_limits():
 
 def test_get_rmse_ignores_nan():
     err = np.array([3.0, np.nan, 4.0])
-    assert np.isclose(get_rmse(err), 3.5)
+    assert np.isclose(get_rmse(err), np.sqrt((3.0**2 + 4.0**2) / 2))
