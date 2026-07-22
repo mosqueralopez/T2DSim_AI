@@ -9,15 +9,29 @@ import pandas as pd
 import torch
 import torch.optim as optim
 
-from t2dsim_ai.data_processing import prepare_training_data, process_raw_csv
+from t2dsim_ai.data_processing import (
+    build_training_metadata,
+    prepare_training_data,
+    process_raw_csv,
+    resolve_subject_id,
+    scale_sequence_splits,
+)
+from t2dsim_ai.metrics import glucose_values
 from t2dsim_ai.model_DTNeuralOGTT import CGMOHSUSimStateSpaceModel_T2D
 from t2dsim_ai.model_neuralOGTT import CGMOHSUSimStateSpaceModel_T2DOGTT
-from t2dsim_ai.options import n_neuron_ind, n_neurons_ogtt, states
-from t2dsim_ai.preprocess import scaler_Pop
+from t2dsim_ai.options import default_seq_len, n_neuron_ind, n_neurons_ogtt, states, ts
+from t2dsim_ai.preprocess import scaler_Pop, scale_inverse_state
 from t2dsim_ai.ss_simulator import ForwardEulerSimulator
+from t2dsim_ai.train_losses import (
+    loss_consistency,
+    loss_fit,
+    scaled_gc_limits_mgdl,
+    state_minimum_values,
+)
 
 _PACKAGE_ROOT = Path(__file__).parent
 _OUTPUT_Gc = 2
+_METRICS_OVERLAP = 0.0  # research validation/test batches use no overlap
 
 
 class _SequenceBatch:
@@ -49,8 +63,77 @@ class _SequenceBatch:
         return x0, u_ogtt, u_pop, y
 
 
-def _rmse(pred, true):
-    return torch.sqrt(torch.mean((pred - true) ** 2))
+
+def _split_dt_rmse(
+    simulator: ForwardEulerSimulator,
+    split: dict,
+    device: torch.device,
+) -> float:
+    """Validation RMSE (mg/dL) for the digital twin on a full data split."""
+    n_seq, _, _ = split["states"].shape
+    x0 = torch.tensor(split["states"][:, 0, :], dtype=torch.float32).to(device)
+    u_ogtt = torch.tensor(
+        split["inputs_OGTT"].transpose(1, 0, 2), dtype=torch.float32
+    ).to(device)
+    u_pop = torch.tensor(
+        split["inputs_Pop"].transpose(1, 0, 2), dtype=torch.float32
+    ).to(device)
+
+    with torch.no_grad():
+        x_dt = simulator(x0, u_ogtt, u_pop, is_DT=True)
+
+    true_gc = split["states"][:, :, _OUTPUT_Gc].transpose(1, 0)[:, :, np.newaxis]
+    true_mgdl = scale_inverse_state(true_gc[1:], _OUTPUT_Gc)
+    pred_dt_mgdl = scale_inverse_state(
+        x_dt[1:, :, _OUTPUT_Gc : _OUTPUT_Gc + 1].cpu().numpy(), _OUTPUT_Gc
+    )
+    return float(np.sqrt(np.mean((pred_dt_mgdl - true_mgdl) ** 2)))
+
+
+def _evaluate_split(
+    simulator: ForwardEulerSimulator,
+    split: dict,
+    device: torch.device,
+    group: str,
+) -> dict[str, float]:
+    """Run full-sequence glucose metrics for a data split (``train``, ``validation``, etc.)."""
+    n_seq, _, _ = split["states"].shape
+    x0 = torch.tensor(split["states"][:, 0, :], dtype=torch.float32).to(device)
+    u_ogtt = torch.tensor(
+        split["inputs_OGTT"].transpose(1, 0, 2), dtype=torch.float32
+    ).to(device)
+    u_pop = torch.tensor(
+        split["inputs_Pop"].transpose(1, 0, 2), dtype=torch.float32
+    ).to(device)
+
+    with torch.no_grad():
+        x_ogtt = simulator(x0, u_ogtt, u_pop, is_DT=False).cpu().numpy()
+        x_dt = simulator(x0, u_ogtt, u_pop, is_DT=True).cpu().numpy()
+
+    true_gc = split["states"][:, :, _OUTPUT_Gc].transpose(1, 0)[:, :, np.newaxis]
+    true_mgdl = scale_inverse_state(true_gc[1:], _OUTPUT_Gc)
+    pred_ogtt_mgdl = scale_inverse_state(
+        x_ogtt[1:, :, _OUTPUT_Gc : _OUTPUT_Gc + 1], _OUTPUT_Gc
+    )
+    pred_dt_mgdl = scale_inverse_state(
+        x_dt[1:, :, _OUTPUT_Gc : _OUTPUT_Gc + 1], _OUTPUT_Gc
+    )
+
+    ogtt_results = glucose_values({"pred": pred_ogtt_mgdl, "true": true_mgdl}).describe().loc[
+        "mean"
+    ]
+    dt_results = glucose_values({"pred": pred_dt_mgdl, "true": true_mgdl}).describe().loc["mean"]
+
+    metrics = {
+        f"RMSE_NeuralOGTT_{group}": float(ogtt_results["RMSE"]),
+        f"RMSE_DigitalTwin_{group}": float(dt_results["RMSE"]),
+        f"n_seqs_{group}": float(n_seq),
+    }
+    for name, value in dt_results.items():
+        if name == "RMSE":
+            continue
+        metrics[f"{name}_{group}"] = float(value)
+    return metrics
 
 
 def train_digital_twin(
@@ -60,12 +143,22 @@ def train_digital_twin(
     n_epochs: int = 5,
     lr: float = 1e-5,
     batch_size: int = 32,
-    seq_len: int = 5 * 12,
+    seq_len: int = default_seq_len,
     overlap: float = 0.98,
     alpha: float = 1e-4,
+    hypo_penalization: float = 9.0,
+    hyper_penalization: float = 90.0,
+    dcgm_weight: float = 100.0,
     device: str | torch.device | None = None,
 ) -> Path:
-    """Train a digital twin from a subject CSV and save artifacts to ``output_dir``."""
+    """Train a digital twin from a subject CSV and save artifacts to ``output_dir``.
+
+    Parameters
+    ----------
+    seq_len
+        Number of 5-minute samples per training sequence. Default is 12 hours
+        (``12 * 60 // ts`` = 144 steps).
+    """
     data_path = Path(data_path)
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -75,7 +168,11 @@ def train_digital_twin(
     else:
         device = torch.device(device)
 
+    lim_inferior, lim_superior = scaled_gc_limits_mgdl()
+    state_mins = state_minimum_values()
+
     df = process_raw_csv(data_path)
+    subject_id = resolve_subject_id(df, data_path.stem)
     train_part = df.iloc[: int(len(df) * 0.7)]
     x_fit = train_part[states].to_numpy(dtype=float)
     u_ogtt_fit = train_part[["input_insulin", "input_carbs"]].to_numpy(dtype=float)
@@ -103,18 +200,16 @@ def train_digital_twin(
     if "train" not in data:
         raise ValueError("Training split is empty; provide a longer CSV.")
 
-    for split in data.values():
-        n_seq, _, n_x = split["states"].shape
-        flat_x = split["states"].reshape(n_seq * seq_len, n_x)
-        flat_u_ogtt = split["inputs_OGTT"].reshape(n_seq * seq_len, 2)
-        flat_u_pop = split["inputs_Pop"].reshape(n_seq * seq_len, 12)
-        flat_x, flat_u_ogtt, flat_u_pop = scaler_Pop(
-            flat_x, flat_u_ogtt, flat_u_pop, str(output_dir), train=False
-        )
-        split["states"] = flat_x.reshape(n_seq, seq_len, n_x)
-        split["inputs_OGTT"] = flat_u_ogtt.reshape(n_seq, seq_len, 2)
-        split["inputs_Pop"] = flat_u_pop.reshape(n_seq, seq_len, 12)
-        split["output"] = split["states"][:, :, [_OUTPUT_Gc]]
+    scale_sequence_splits(data, seq_len, output_dir)
+
+    eval_data = prepare_training_data(
+        data_path,
+        seq_len=seq_len,
+        overlap=_METRICS_OVERLAP,
+        train_frac=0.7,
+        val_frac=0.15,
+    )
+    scale_sequence_splits(eval_data, seq_len, output_dir)
 
     ss_ogtt = CGMOHSUSimStateSpaceModel_T2DOGTT(n_feat=n_neurons_ogtt).to(device)
     ss_ogtt.load_state_dict(
@@ -128,50 +223,97 @@ def train_digital_twin(
 
     optimizer = optim.Adam(ss_dt.parameters(), lr=lr, weight_decay=1e-3)
     batch = _SequenceBatch(data["train"], batch_size, device)
-    val_batch = (
-        _SequenceBatch(data["validation"], 1, device) if "validation" in data else None
-    )
+
+    n_train_seq = batch.n_seq
+    iters_per_epoch = max(1, n_train_seq // batch_size)
+    has_validation = "validation" in eval_data
+
+    print(f"Sequence length: {seq_len} steps ({seq_len * ts / 60:.0f} h)")
+    print(f"Training sequences: {n_train_seq}")
+    print(f"Iterations per epoch: {iters_per_epoch}")
+    if "validation" in eval_data:
+        print(
+            f"Validation sequences (no overlap, for metrics): "
+            f"{eval_data['validation']['states'].shape[0]}"
+        )
 
     best_val = float("inf")
     best_state = None
-    loss_history = []
+    best_epoch = 0
+    epoch_records: list[dict[str, float | int]] = []
 
-    n_iter = max(1, n_epochs * max(1, batch.n_seq // batch_size))
-    for itr in range(n_iter):
-        optimizer.zero_grad()
-        x0, u_ogtt, u_pop, y = batch.get_batch()
-        x_sim = simulator(x0, u_ogtt, u_pop, is_DT=True)
-        pred = x_sim[:, :, [_OUTPUT_Gc]]
-        target = y.permute(1, 0, 2)
-        fit_loss = torch.mean((pred - target) ** 2)
-        consistency = torch.mean(x_sim**2) * 0.0 + torch.mean(torch.relu(-x_sim)) * 0.0
-        loss = fit_loss + alpha * consistency
-        loss.backward()
-        optimizer.step()
-        loss_history.append(float(loss.item()))
+    for epoch in range(1, n_epochs + 1):
+        epoch_losses: list[float] = []
 
-        if val_batch is not None and (itr + 1) % max(1, n_iter // n_epochs) == 0:
-            with torch.no_grad():
-                x0_v, u_ogtt_v, u_pop_v, y_v = val_batch.get_batch()
-                x_sim_v = simulator(x0_v, u_ogtt_v, u_pop_v, is_DT=True)
-                val_rmse = _rmse(
-                    x_sim_v[:, :, [_OUTPUT_Gc]], y_v.permute(1, 0, 2)
-                ).item()
+        for _ in range(iters_per_epoch):
+            optimizer.zero_grad()
+            x0, u_ogtt, u_pop, y = batch.get_batch()
+            x_sim = simulator(x0, u_ogtt, u_pop, is_DT=True)
+
+            if torch.isnan(x_sim).any() or torch.isinf(x_sim).any():
+                raise RuntimeError(f"Non-finite simulation in epoch {epoch}")
+
+            pred = x_sim[:, :, [_OUTPUT_Gc]]
+            target = y.permute(1, 0, 2)
+
+            fit_loss = loss_fit(
+                pred,
+                target,
+                lim_inferior=lim_inferior,
+                lim_superior=lim_superior,
+                hypo_penalization=hypo_penalization,
+                hyper_penalization=hyper_penalization,
+                dcgm_weight=dcgm_weight,
+            )
+            consistency_loss = loss_consistency(x_sim, state_mins)
+            loss = fit_loss + alpha * consistency_loss
+            loss.backward()
+            optimizer.step()
+            epoch_losses.append(float(loss.item()))
+
+        avg_loss = float(np.mean(epoch_losses))
+        record: dict[str, float | int] = {"epoch": epoch, "loss": avg_loss}
+
+        if has_validation:
+            val_rmse = _split_dt_rmse(simulator, eval_data["validation"], device)
+            record["val_rmse_mgdl"] = val_rmse
             if val_rmse < best_val:
                 best_val = val_rmse
+                best_epoch = epoch
                 best_state = {k: v.cpu().clone() for k, v in ss_dt.state_dict().items()}
+            print(
+                f"Epoch {epoch}/{n_epochs} | loss {avg_loss:.6f} | "
+                f"val_rmse {val_rmse:.4f} mg/dL"
+            )
+        else:
+            print(f"Epoch {epoch}/{n_epochs} | loss {avg_loss:.6f}")
+
+        epoch_records.append(record)
 
     if best_state is None:
         best_state = ss_dt.state_dict()
+    ss_dt.load_state_dict(best_state)
     torch.save(best_state, output_dir / "model.pt")
 
-    info = pd.DataFrame(
-        {
-            "metric": ["best_val_rmse_scaled", "n_epochs", "n_iter", "subjectID"],
-            "value": [best_val, n_epochs, n_iter, data_path.stem],
-        }
-    )
-    info.to_csv(output_dir / "info.csv", index=False)
-    pd.DataFrame({"loss": loss_history}).to_csv(output_dir / "loss.csv", index=False)
+    ogtt_model_path = _PACKAGE_ROOT / "models/OGTT_productionModel_6compartments.pt"
+    info = build_training_metadata(df, subject_id)
+    info["best_epoch"] = best_epoch
+    info["best_valLoss"] = best_val
+    info["NeuralOGTT_path"] = str(ogtt_model_path)
+    info["hypo_penalization"] = hypo_penalization
+    info["hyper_penalization"] = hyper_penalization
+    info["seq_len"] = seq_len
+    info["seq_len_hours"] = seq_len * ts / 60
+
+    for group in ("train", "validation"):
+        if group in eval_data:
+            info.update(_evaluate_split(simulator, eval_data[group], device, group))
+
+    if "validation" in data:
+        info["best_valLoss"] = info["RMSE_DigitalTwin_validation"]
+
+    info_series = pd.Series(info)
+    info_series.to_csv(output_dir / "info.csv")
+    pd.DataFrame(epoch_records).to_csv(output_dir / "loss.csv", index=False)
 
     return output_dir

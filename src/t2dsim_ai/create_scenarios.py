@@ -6,6 +6,11 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from t2dsim_ai.data_processing import (
+    basal_insulin_plot_uh,
+    basal_micro_bolus_u,
+    insulin_deliveries_u_to_uh,
+)
 from t2dsim_ai.medications import MEDICATION_SAMPLING_DT_MIN, discrete_oral_med_kernel
 from t2dsim_ai.options import inputs, inputs_OGTT, inputs_Pop, states, ts
 
@@ -13,6 +18,68 @@ _MODELS_DIR = Path(__file__).parent / "models"
 _DEFAULT_MEALS = [(60, 75), (240, 90), (660, 30)]  # (minutes from start, carbs in g)
 _DEFAULT_ORAL_DOSE = 1.0
 _DEFAULT_ORAL_TIME_MIN = 8 * 60  # 08:00 from midnight; adjusted by initial_time
+_DEFAULT_BASAL_INSULIN_DAILY_U = 54.0  # U/day
+_SULFONYLUREA_GLIMEPIRIDE_IDS = {5, 28, 42, 47, 56}
+_SULFONYLUREA_GLIPIZIDE_IDS = {31, 34, 45, 46}
+_ORAL_MED_PLOT = {
+    "input_glp1": ("X", "GLP-1"),
+    "input_sulfonylurea": ("h", "Sulfonylurea"),
+    "input_biguanide": ("p", "Biguanide"),
+    "input_sglt2": ("s", "SGLT-2"),
+}
+
+def _subject_numeric_id(subject_id) -> int | None:
+    if subject_id is None or (isinstance(subject_id, float) and np.isnan(subject_id)):
+        return None
+    try:
+        return int(str(subject_id).split("-")[-1])
+    except ValueError:
+        return None
+
+
+def _sulfonylurea_med_key(subject_id) -> str:
+    sid = _subject_numeric_id(subject_id)
+    if sid in _SULFONYLUREA_GLIPIZIDE_IDS:
+        return "input_sulfonylurea_glipizide"
+    return "input_sulfonylurea_glimepiride"
+
+
+def _oral_dose_index(initial_time: str) -> int:
+    h0, m0, _ = initial_time.split(":")
+    return max(0, (_DEFAULT_ORAL_TIME_MIN - (int(h0) * 60 + int(m0))) // ts)
+
+
+def active_medications(meta: dict) -> list[str]:
+    """Return active medication input columns for a twin metadata dict."""
+    active: list[str] = []
+    if bool(meta.get("med_insulin", False)):
+        active.append("input_insulin")
+    if bool(meta.get("med_glp1", False)):
+        active.append("input_glp1")
+    if bool(meta.get("med_sulfonylurea", False)):
+        active.append("input_sulfonylurea")
+    if bool(meta.get("med_biguanide", False)):
+        active.append("input_biguanide")
+    if bool(meta.get("med_sglt2", False)):
+        active.append("input_sglt2")
+    return active
+
+
+def oral_medication_dose_indices(
+    df_scenario: pd.DataFrame,
+    meta: dict,
+    *,
+    initial_time: str = "08:00:00",
+) -> dict[str, int]:
+    """Map active oral medication columns to their once-daily dose row index."""
+    dose_index = _oral_dose_index(initial_time)
+    indices: dict[str, int] = {}
+    for col in active_medications(meta):
+        if col == "input_insulin":
+            continue
+        if 0 <= dose_index < len(df_scenario):
+            indices[col] = dose_index
+    return indices
 
 
 def _info_to_dict(info: pd.DataFrame | str | Path) -> dict:
@@ -59,7 +126,8 @@ def ogtt_scenario(init_cgm=110, meal_size=75, sim_time=5 * 60, t_meal_from_start
     df_scenario["time"] = np.arange(0, sim_time, ts)
 
     df_scenario[states + inputs_OGTT] = 0.0
-    df_scenario.loc[0, "state_Gc"] = init_cgm
+    df_scenario["cgm_G0"] = np.nan
+    df_scenario.loc[0, "cgm_G0"] = init_cgm
     df_scenario.loc[t_meal_from_start // ts, "input_carbs"] = meal_size
     df_scenario.loc[0, states] = df_init.loc[int(init_cgm), states].values
 
@@ -91,6 +159,7 @@ def digitalTwin_scenario(
     )
 
     df_scenario[states + inputs_OGTT + inputs_Pop] = 0.0
+    df_scenario["cgm_G0"] = np.nan
     df_scenario["feat_hour_of_day_cos"] = np.cos(
         2 * np.pi * df_scenario["time"].dt.hour / 24
     )
@@ -100,7 +169,7 @@ def digitalTwin_scenario(
     df_scenario["feat_is_weekend"] = (df_scenario["time"].dt.dayofweek >= 5).astype(
         float
     )
-    df_scenario.loc[0, "state_Gc"] = init_cgm
+    df_scenario.loc[0, "cgm_G0"] = init_cgm
     df_scenario.loc[np.array(meal_time_fromStart_array) // ts, "input_carbs"] = (
         meal_size_array
     )
@@ -132,6 +201,7 @@ def scenario_from_twin_info(
     meal_schedule: list | None = None,
     bedtime: int = 13 * 60,
     sleep_duration: int = 8,
+    basal_insulin_daily_u: float = _DEFAULT_BASAL_INSULIN_DAILY_U,
     seed: int = 0,
 ) -> pd.DataFrame:
     """Build a one-day simulation scenario from a digital twin ``info.csv``."""
@@ -154,6 +224,7 @@ def scenario_from_twin_info(
         freq=f"{ts} min",
     )
     df_scenario[states + inputs] = 0.0
+    df_scenario["cgm_G0"] = np.nan
 
     df_scenario["feat_hour_of_day_cos"] = np.cos(
         2 * np.pi * df_scenario["time"].dt.hour / 24
@@ -167,7 +238,7 @@ def scenario_from_twin_info(
 
     df_init = pd.read_csv(_MODELS_DIR / "initSteadyStates.csv").set_index("initCGM")
     init_key = int(np.clip(init_cgm, 40, 400))
-    df_scenario.loc[0, "state_Gc"] = init_cgm
+    df_scenario.loc[0, "cgm_G0"] = init_cgm
     df_scenario.loc[0, states] = df_init.loc[init_key, states].values
 
     meals = meal_schedule if meal_schedule is not None else _DEFAULT_MEALS
@@ -190,8 +261,19 @@ def scenario_from_twin_info(
     df_scenario["input_hr_max"] = hr_series.rolling(3, min_periods=1).max().values
     df_scenario["input_hr_std"] = hr_series.rolling(3, min_periods=1).std().fillna(0).values
 
-    h0, m0, _ = initial_time.split(":")
-    oral_dose_index = max(0, (_DEFAULT_ORAL_TIME_MIN - (int(h0) * 60 + int(m0))) // ts)
+    oral_dose_index = _oral_dose_index(initial_time)
+    subject_id = meta.get("subjectID")
+
+    df_scenario["basal_insulin_plot_uh"] = 0.0
+    if bool(meta.get("med_insulin", False)):
+        micro_bolus_u = basal_micro_bolus_u(basal_insulin_daily_u, ts_min=ts)
+        deliveries_u = np.full(n_steps, micro_bolus_u, dtype=float)
+        df_scenario["input_insulin"] = insulin_deliveries_u_to_uh(
+            deliveries_u, ts_min=ts
+        )
+        df_scenario["basal_insulin_plot_uh"] = basal_insulin_plot_uh(
+            basal_insulin_daily_u, ts_min=ts
+        )
 
     if bool(meta.get("med_biguanide", False)):
         _apply_oral_med_trace(
@@ -218,7 +300,7 @@ def scenario_from_twin_info(
         _apply_oral_med_trace(
             df_scenario["input_sulfonylurea"].values,
             _DEFAULT_ORAL_DOSE,
-            "input_sulfonylurea_glimepiride",
+            _sulfonylurea_med_key(subject_id),
             oral_dose_index,
         )
 

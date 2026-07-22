@@ -47,6 +47,8 @@ python example/runOGTT.py
 
 ### DT-NeuralOGTT
 
+The package ships **40 pre-trained digital twins** in `src/t2dsim_ai/models/DigitalTwins/`. These were trained on real **T2Help** cohort data (April 2026 Bayesian-optimization runs) and are intended for inference out of the box.
+
 Simulate one day for bundled digital twin `#0` using a scenario generated from the twin's `info.csv`:
 
 ```python
@@ -69,11 +71,15 @@ python example/runDTNeuralOGTT.py
 
 ## Creation of a Digital Twin
 
-Train a digital twin from a subject CSV with CGM, heart rate, meals, medications, and sleep.
+Train a personalized digital twin from a subject CSV with CGM, heart rate, meals, medications, and sleep.
 
-Example dataset: [`example/example_model/data_example.csv`](example/example_model/data_example.csv)
+### Example training data (synthetic)
 
-Required columns:
+[`example/example_model/data_example.csv`](example/example_model/data_example.csv) is **synthetic mock data** (subject `example-001`, 7 days of scripted CGM/HR/meals/meds). It exists only to demonstrate the training workflow and smoke-test the pipeline—it is **not** real patient data and should not be used to evaluate model performance.
+
+For research use, train on compiled subject CSVs from the T2Help study (processed with the T2D-simulator `read_dataset` pipeline). Optional demographic columns (`demog_*`) are written to `info.csv` when present in the input file.
+
+### Required CSV columns
 
 - `timestamp`
 - `cgm_value`
@@ -84,19 +90,25 @@ Required columns:
 - `grouped_meds_medicationGroup$sglt2`
 - `grouped_meds_medicationGroup$glp1`
 - `grouped_meds_medicationGroup$biguanide`
-- `sleep_efficiency` (optional)
+- `sleep_efficiency`
 
-Run training:
+Run training (default sequence length is 12 hours at 5-minute sampling; override with ``seq_len``):
 
 ```bash
 python example/trainDigitalTwin.py
+```
+
+```python
+from t2dsim_ai import train_digital_twin
+
+train_digital_twin("subject.csv", "output/", seq_len=12 * 12)  # 12 h
 ```
 
 This writes `model.pt`, `scaler_inputsPop.pkl`, and `info.csv` to `example/example_model/output/`.
 
 Processing utilities (HR imputation, insulin on board, oral medication kernels) live in `t2dsim_ai.data_processing`.
 
-Maintainers can refresh bundled twins from the research codebase with:
+To refresh bundled twins from the research repository (real T2Help subjects):
 
 ```bash
 python scripts/sync_digital_twins.py

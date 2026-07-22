@@ -51,4 +51,5 @@ ax[0].set_title("NeuralOGTT - Fasting Glucose:" + str(initCGM) + " mg/dL")
 ax[0].set_ylim(40, 300)
 ax[1].set_xlabel("Time [min]", fontsize=15)
 
+plt.savefig('img/example_neuralOGTT_fastingGlucose_'+str(initCGM)+'.png')
 plt.show()

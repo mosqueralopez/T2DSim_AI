@@ -8,7 +8,8 @@ import numpy as np
 import pandas as pd
 
 from t2dsim_ai.medications import MEDICATION_SAMPLING_DT_MIN, discrete_oral_med_kernel
-from t2dsim_ai.options import inputs, inputs_OGTT, inputs_Pop, rename_cols_dict, states
+from t2dsim_ai.options import inputs, inputs_OGTT, inputs_Pop, rename_cols_dict, states, default_seq_len
+from t2dsim_ai.preprocess import scaler_Pop
 
 REQUIRED_COLUMNS = [
     "timestamp",
@@ -27,11 +28,17 @@ REQUIRED_COLUMNS = [
 
 
 def calculate_insulin_availability_and_iob_single_delivery(
-    insulin, ts_min, t_action_max_min
+    insulin,
+    ts_min,
+    t_action_max_min,
+    *,
+    return_last=False,
 ):
-    tmax = 55
+    """Insulin PK for one delivery [U] on a 5-min grid (Hovorka-style two-compartment IOB)."""
+    ts_min = float(ts_min)
+    tmax = 55.0
     ke = 0.138
-    result_array_size = t_action_max_min // ts_min
+    result_array_size = int(t_action_max_min // ts_min)
     q1 = np.zeros(result_array_size)
     q2 = np.zeros(result_array_size)
     i_plasma = np.zeros(result_array_size)
@@ -49,20 +56,84 @@ def calculate_insulin_availability_and_iob_single_delivery(
         q2[tt + 1] = q2[tt] + dq2 * ts_min
         i_plasma[tt + 1] = i_plasma[tt] + di * ts_min
         q4[tt + 1] = q4[tt] + dq4 * ts_min
-    return i_plasma, insulin - q4
+
+    ins_availability = i_plasma
+    iob = insulin - q4
+    if return_last:
+        return ins_availability[-1], iob[-1], q1[-1], q2[-1], i_plasma[-1]
+    return ins_availability, iob, q1, q2, i_plasma
 
 
-def calculate_insulin_availability_and_iob(insulin, ts_min=5, t_action_max_min=500):
-    insulin_on_board = np.zeros_like(insulin, dtype=float)
-    insulin_idx = np.where(insulin > 0)[0]
-    window = t_action_max_min // ts_min
-    for idx in insulin_idx:
-        _, iob = calculate_insulin_availability_and_iob_single_delivery(
-            insulin[idx], ts_min, t_action_max_min
+def basal_micro_bolus_u(daily_u: float, ts_min: float = MEDICATION_SAMPLING_DT_MIN) -> float:
+    """Split a daily basal dose into equal 5-min micro-boluses [U/step]."""
+    steps_per_day = int(24 * 60 // ts_min)
+    return float(daily_u) / steps_per_day
+
+
+def basal_insulin_plot_uh(daily_u: float, ts_min: float = MEDICATION_SAMPLING_DT_MIN) -> float:
+    """Prescribed basal rate for plotting [U/h] (= micro-bolus U/step × 12)."""
+    return basal_micro_bolus_u(daily_u, ts_min) * (60.0 / ts_min)
+
+
+def insulin_deliveries_u_to_uh(
+    deliveries_u: np.ndarray,
+    *,
+    ts_min: float = MEDICATION_SAMPLING_DT_MIN,
+    t_action_max_min: int = 500,
+) -> np.ndarray:
+    """Map insulin deliveries [U/step] to model input ``input_insulin`` [U/h] via IOB."""
+    deliveries_u = np.asarray(deliveries_u, dtype=float)
+    insulin_on_board = np.zeros_like(deliveries_u, dtype=float)
+    for index in np.flatnonzero(deliveries_u > 0):
+        bolus = deliveries_u[index]
+        _, iob, _, _, _ = calculate_insulin_availability_and_iob_single_delivery(
+            bolus, ts_min, t_action_max_min
         )
-        end = min(idx + window, len(insulin))
-        insulin_on_board[idx:end] += iob[: end - idx]
-    return insulin_on_board
+        end = min(index + len(iob), len(insulin_on_board))
+        n_add = end - index
+        if n_add > 0:
+            insulin_on_board[index:end] += iob[:n_add]
+    return insulin_on_board * (60.0 / ts_min)  # U/step IOB -> U/h
+
+
+def calculate_insulin_availability_and_iob(
+    insulin, ts_min=5, t_action_max_min=500, return_last=False
+):
+    insulin = np.asarray(insulin, dtype=float)
+    insulin_availability = np.zeros_like(insulin)
+    insulin_on_board = np.zeros_like(insulin)
+    insulin_s1 = np.zeros_like(insulin)
+    insulin_s2 = np.zeros_like(insulin)
+    insulin_i = np.zeros_like(insulin)
+
+    window = int(t_action_max_min // float(ts_min))
+    for index in np.where(insulin > 0)[0]:
+        iav, iob, s1, s2, i_val = calculate_insulin_availability_and_iob_single_delivery(
+            insulin[index], ts_min, t_action_max_min
+        )
+        if index + window <= insulin.size:
+            insulin_availability[index : index + window] += iav
+            insulin_on_board[index : index + window] += iob
+            insulin_s1[index : index + window] += s1
+            insulin_s2[index : index + window] += s2
+            insulin_i[index : index + window] += i_val
+        else:
+            n_tail = insulin.size - index
+            insulin_availability[index:] += iav[-n_tail:]
+            insulin_on_board[index:] += iob[-n_tail:]
+            insulin_s1[index:] += s1[-n_tail:]
+            insulin_s2[index:] += s2[-n_tail:]
+            insulin_i[index:] += i_val[-n_tail:]
+
+    if return_last:
+        return (
+            insulin_availability[-1],
+            insulin_on_board[-1],
+            insulin_s1[-1],
+            insulin_s2[-1],
+            insulin_i[-1],
+        )
+    return insulin_availability, insulin_on_board, insulin_s1, insulin_s2, insulin_i
 
 
 def impute_heart_rate(df: pd.DataFrame, hr_columns: list[str]) -> pd.DataFrame:
@@ -108,9 +179,14 @@ def process_insulin(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
     if "input_insulin" not in df.columns:
         df["input_insulin"] = 0.0
-    bolus = df["input_insulin"].fillna(0).to_numpy(dtype=float)
-    df["input_insulin"] = calculate_insulin_availability_and_iob(bolus)
-    df["input_insulin"] = df["input_insulin"] * 12  # U -> U/h
+    rapid = df["input_insulin"].fillna(0).to_numpy(dtype=float)
+    long_acting = np.zeros(len(df), dtype=float)
+    if "meds_medicationDose$long_acting_insulin_MOD" in df.columns:
+        long_acting = (
+            df["meds_medicationDose$long_acting_insulin_MOD"].fillna(0).to_numpy(dtype=float)
+        )
+    deliveries_u = rapid + long_acting
+    df["input_insulin"] = insulin_deliveries_u_to_uh(deliveries_u)
     return df
 
 
@@ -177,7 +253,7 @@ def _frame_sequences(arr: np.ndarray, seq_len: int, overlap: float) -> np.ndarra
 
 def prepare_training_data(
     path: str | Path,
-    seq_len: int = 5 * 12,
+    seq_len: int = default_seq_len,
     overlap: float = 0.98,
     train_frac: float = 0.7,
     val_frac: float = 0.15,
@@ -210,3 +286,73 @@ def prepare_training_data(
             "output": y,
         }
     return out
+
+
+def scale_sequence_splits(
+    splits: dict,
+    seq_len: int,
+    scaler_dir: str | Path,
+) -> None:
+    """Apply a fitted population scaler to sequence splits in place."""
+    scaler_dir = Path(scaler_dir)
+    for split in splits.values():
+        n_seq, _, n_x = split["states"].shape
+        flat_x = split["states"].reshape(n_seq * seq_len, n_x)
+        flat_u_ogtt = split["inputs_OGTT"].reshape(n_seq * seq_len, 2)
+        flat_u_pop = split["inputs_Pop"].reshape(n_seq * seq_len, 12)
+        flat_x, flat_u_ogtt, flat_u_pop = scaler_Pop(
+            flat_x, flat_u_ogtt, flat_u_pop, str(scaler_dir), train=False
+        )
+        split["states"] = flat_x.reshape(n_seq, seq_len, n_x)
+        split["inputs_OGTT"] = flat_u_ogtt.reshape(n_seq, seq_len, 2)
+        split["inputs_Pop"] = flat_u_pop.reshape(n_seq, seq_len, 12)
+        split["output"] = split["states"][:, :, [states.index("state_Gc")]]
+
+
+def resolve_subject_id(df: pd.DataFrame, fallback: str) -> str:
+    """Return subject ID in bundled twin format (e.g. ``021-005``)."""
+    if "subjectID" in df.columns:
+        subject_id = str(df["subjectID"].iloc[0])
+        if subject_id.startswith("S") and len(subject_id) > 1:
+            return subject_id[1:]
+        return subject_id
+    return fallback
+
+
+def build_training_metadata(df: pd.DataFrame, subject_id: str) -> dict:
+    """Build demographics and medication flags for ``info.csv``."""
+    info: dict = {}
+    for col in df.columns:
+        if col.startswith("demog_"):
+            value = df[col].iloc[0]
+            if pd.notna(value):
+                info[col] = value
+
+    train_end = int(len(df) * 0.7)
+    train_df = df.iloc[:train_end].copy()
+    if "timestamp" in train_df.columns:
+        train_df["date"] = train_df["timestamp"].dt.date
+
+    med_columns = {
+        "sulfonylurea": "input_sulfonylurea",
+        "sglt2": "input_sglt2",
+        "glp1": "input_glp1",
+        "biguanide": "input_biguanide",
+        "insulin": "input_insulin",
+    }
+    for med, col in med_columns.items():
+        if col not in df.columns:
+            info[f"med_{med}"] = False
+            continue
+        if med == "glp1":
+            info[f"med_{med}"] = bool(df[col].fillna(0).sum() > 0)
+            continue
+        positive = train_df.loc[train_df[col].fillna(0) > 0]
+        if "date" in train_df.columns:
+            n_days = positive["date"].nunique()
+        else:
+            n_days = len(positive)
+        info[f"med_{med}"] = n_days > 10
+
+    info["subjectID"] = subject_id
+    return info

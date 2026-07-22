@@ -1,5 +1,40 @@
-metric,value
-best_val_rmse_scaled,0.3601559102535248
-n_epochs,2
-n_iter,168
-subjectID,data_example
+,0
+med_sulfonylurea,False
+med_sglt2,False
+med_glp1,True
+med_biguanide,False
+med_insulin,False
+subjectID,example-001
+best_epoch,10
+best_valLoss,3655.5974213620198
+NeuralOGTT_path,/Users/roquemev/Library/CloudStorage/OneDrive-OregonHealth&ScienceUniversity/Documents/OHSU/Tools/T2DSim_AI/src/t2dsim_ai/models/OGTT_productionModel_6compartments.pt
+hypo_penalization,9.0
+hyper_penalization,90.0
+seq_len,144
+seq_len_hours,12.0
+RMSE_NeuralOGTT_train,7849.273872614005
+RMSE_DigitalTwin_train,4358.257908250092
+n_seqs_train,9.0
+Glucose Variability_true_train,0.0
+Glucose Variability_pred_train,36.27540702834287
+TITR_true_train,0.0
+TITR_pred_train,0.5439005439005439
+TIR_true_train,0.0
+TIR_pred_train,0.9324009324009324
+TAR_true_train,100.0
+TAR_pred_train,55.24475524475524
+TBR_true_train,0.0
+TBR_pred_train,43.82284382284383
+RMSE_NeuralOGTT_validation,7415.65140961327
+RMSE_DigitalTwin_validation,3655.5974213620198
+n_seqs_validation,2.0
+Glucose Variability_true_validation,0.0
+Glucose Variability_pred_validation,378.9603339391691
+TITR_true_validation,0.0
+TITR_pred_validation,0.6993006993006993
+TIR_true_validation,0.0
+TIR_pred_validation,1.048951048951049
+TAR_true_validation,100.0
+TAR_pred_validation,58.74125874125875
+TBR_true_validation,0.0
+TBR_pred_validation,40.209790209790214

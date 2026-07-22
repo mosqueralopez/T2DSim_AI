@@ -9,6 +9,7 @@ from t2dsim_ai.options import (
 )
 from t2dsim_ai.ss_simulator import ForwardEulerSimulator
 from t2dsim_ai.model_neuralOGTT import CGMOHSUSimStateSpaceModel_T2DOGTT, WeightClipper
+from t2dsim_ai.init_states import build_initial_state, compute_cgm_trend, resolve_cgm_g0
 from t2dsim_ai.preprocess import scaler_inverse, scaler_Pop
 import torch
 from pathlib import Path
@@ -218,7 +219,7 @@ class DigitalTwin:
         ]
         digitalTwin_list.sort()
         self.digital_twin_folder = digitalTwin_list[self.n_digitalTwin]
-
+        self.subject_id = Path(self.digital_twin_folder).name
         self.digital_twin_Info = pd.read_csv(self.digital_twin_folder + "/info.csv")
         self.setup_simulator()
 
@@ -247,7 +248,6 @@ class DigitalTwin:
         )
 
     def prepare_data(self, df_scenario):
-
         _, u_ogtt, u_pop = scaler_Pop(
             df_scenario[states].values,
             df_scenario[inputs_OGTT].values,
@@ -276,10 +276,35 @@ class DigitalTwin:
 
         return x0_est, u_ogtt[:, [0], :], u_pop[:, [0], :]
 
-    def simulate(self, df_scenario_original, is_DT=True):
+    def simulate(
+        self,
+        df_scenario_original,
+        is_DT=True,
+        *,
+        cgm_trend=None,
+        init_cgm=None,
+        use_trend_init=False,
+    ):
         # Prepare data
         df_scenario = df_scenario_original.copy()
         x0_est, u_ogtt, u_pop = self.prepare_data(df_scenario)
+
+        if use_trend_init:
+            cgm_g0 = resolve_cgm_g0(df_scenario, init_cgm=init_cgm)
+            if cgm_trend is None:
+                if "cgm_history" in df_scenario.columns:
+                    history = df_scenario["cgm_history"].dropna().values
+                    cgm_trend = compute_cgm_trend(history) if len(history) else 0.0
+                else:
+                    cgm_trend = 0.0
+            x0_est = build_initial_state(
+                self.nn_solution,
+                cgm_g0,
+                u_ogtt[0, 0],
+                gc_trend=float(cgm_trend),
+                device=self.device,
+            )
+
         with torch.no_grad():
             x_sim = self.nn_solution(x0_est, u_ogtt, u_pop, is_DT=is_DT)
             df_scenario[states] = scaler_inverse(

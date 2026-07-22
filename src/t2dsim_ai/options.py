@@ -3,6 +3,9 @@ import numpy as np
 scale = True
 ts = 5  # min
 
+# Default training window: 12 h at ``ts``-minute sampling (144 steps).
+default_seq_len = 12 * 60 // ts
+
 states_name = np.array(["C1", "C2", "Gc", "Ge", "Ie", "I"])
 states = ["state_" + s for s in states_name]
 
