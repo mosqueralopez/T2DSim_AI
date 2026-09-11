@@ -13,6 +13,8 @@ This repository provides tools to simulate glucose-insulin dynamics in type 2 di
 - **NeuralOGTT**: population OGTT model from fasting glucose
 - **DT-NeuralOGTT**: personalized digital twins integrating heart rate, sleep, medications, and temporal features
 
+Read more: [Biocybernetics and Biomedical Engineering](https://www.sciencedirect.com/science/article/abs/pii/S0208521626000562)
+
 ## Table of Contents
 
 - [Installation](#installation)
